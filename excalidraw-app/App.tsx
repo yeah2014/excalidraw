@@ -90,6 +90,10 @@ import {
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
 import { AppFooter } from "./components/AppFooter";
+import { WhiteboardDialogs } from "./components/WhiteboardDialogs";
+import { WhiteboardSelectionDialog } from "./components/WhiteboardSelectionDialog";
+import { useWhiteboardAutoSave } from "./hooks/useWhiteboardAutoSave";
+import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
 import {
   Provider,
   useAtom,
@@ -362,6 +366,25 @@ const ExcalidrawWrapper = () => {
 
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
   const [collabAPI] = useAtom(collabAPIAtom);
+  const [currentWhiteboardId, setCurrentWhiteboardId] = useState<string | null>(
+    null,
+  );
+  const [showWhiteboardSelection, setShowWhiteboardSelection] = useState(true);
+  const [isLoadingWhiteboard, setIsLoadingWhiteboard] = useState(false);
+  const whiteboardIdRef = useRef<string | null>(null);
+
+  // 同步 ref
+  useEffect(() => {
+    whiteboardIdRef.current = currentWhiteboardId;
+    console.log("App: currentWhiteboardId 更新为:", currentWhiteboardId);
+  }, [currentWhiteboardId]);
+
+  // 实时保存功能
+  const {
+    save: autoSave,
+    cancel: cancelAutoSave,
+    saveImmediately,
+  } = useWhiteboardAutoSave(excalidrawAPI, currentWhiteboardId);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
@@ -622,6 +645,19 @@ const ExcalidrawWrapper = () => {
   ) => {
     if (collabAPI?.isCollaborating()) {
       collabAPI.syncElements(elements);
+    }
+
+    // 实时保存到数据库（如果有当前白板ID且不在加载白板）
+    if (currentWhiteboardId && excalidrawAPI && !isLoadingWhiteboard) {
+      // 添加日志，确认当前白板ID
+      if (Math.random() < 0.01) {
+        // 只记录1%的调用，避免日志过多
+        console.log(
+          "onChange 触发自动保存，currentWhiteboardId:",
+          currentWhiteboardId,
+        );
+      }
+      autoSave(elements, appState, files);
     }
 
     // this check is redundant, but since this is a hot path, it's best
@@ -931,6 +967,367 @@ const ExcalidrawWrapper = () => {
             }
           }}
         />
+
+        {excalidrawAPI && (
+          <WhiteboardDialogs
+            excalidrawAPI={excalidrawAPI}
+            onLoadWhiteboard={async (id: string) => {
+              if (!excalidrawAPI) {
+                throw new Error("Excalidraw API not available");
+              }
+
+              const HTTP_STORAGE_BACKEND_URL =
+                import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+
+              if (!HTTP_STORAGE_BACKEND_URL) {
+                throw new Error("后端服务未配置");
+              }
+
+              // 1. 如果有当前白板，先保存当前白板内容
+              const oldWhiteboardId = currentWhiteboardId;
+              console.log(
+                "切换白板: 当前白板ID:",
+                oldWhiteboardId,
+                "新白板ID:",
+                id,
+                "是否相同:",
+                oldWhiteboardId === id,
+              );
+
+              if (oldWhiteboardId && oldWhiteboardId !== id) {
+                console.log("切换白板: 先保存当前白板内容");
+                try {
+                  // 取消待保存的任务，然后立即保存
+                  cancelAutoSave();
+                  // 等待一小段时间，确保取消操作完成
+                  await new Promise((resolve) => setTimeout(resolve, 100));
+                  // 立即保存当前白板
+                  const saveSuccess = await saveImmediately();
+                  if (!saveSuccess) {
+                    console.warn("保存当前白板失败，但继续切换");
+                  } else {
+                    console.log("当前白板已保存成功");
+                  }
+                } catch (error) {
+                  console.error("保存当前白板时出错:", error);
+                  // 即使保存失败，也继续切换（用户可能已经决定切换）
+                }
+              }
+
+              // 2. 取消所有待保存的任务
+              cancelAutoSave();
+
+              // 3. 先清除当前白板ID，防止在加载过程中触发自动保存
+              setCurrentWhiteboardId(null);
+
+              // 3. 等待一小段时间，确保防抖任务已完全取消，并且 ref 已更新
+              await new Promise((resolve) => setTimeout(resolve, 200));
+
+              setIsLoadingWhiteboard(true);
+
+              try {
+                // 4. 获取白板数据
+                const response = await fetch(
+                  `${HTTP_STORAGE_BACKEND_URL}/whiteboards/${id}`,
+                );
+
+                if (!response.ok) {
+                  throw new Error("加载白板失败");
+                }
+
+                // 5. 获取二进制数据
+                const arrayBuffer = await response.arrayBuffer();
+
+                // 6. 将 ArrayBuffer 转换为 Blob
+                const blob = new Blob([arrayBuffer], {
+                  type: "application/octet-stream",
+                });
+
+                // 7. 从 blob 加载数据
+                const currentAppState = excalidrawAPI.getAppState();
+                const currentElements = excalidrawAPI.getSceneElements();
+                const data = await loadFromBlob(
+                  blob,
+                  currentAppState,
+                  currentElements,
+                );
+
+                // 8. 更新场景（此时 currentWhiteboardId 为 null，不会触发自动保存）
+                excalidrawAPI.updateScene({
+                  elements: data.elements,
+                  appState: data.appState,
+                });
+
+                // 9. 如果有文件，添加文件
+                if (data.files) {
+                  excalidrawAPI.addFiles(Object.values(data.files));
+                }
+
+                // 10. 等待一小段时间，确保 updateScene 触发的 onChange 已完成
+                await new Promise((resolve) => setTimeout(resolve, 200));
+
+                // 11. 设置新的白板ID（此时才会启用自动保存）
+                console.log(
+                  "切换白板: 设置新白板ID:",
+                  id,
+                  "旧白板ID:",
+                  oldWhiteboardId,
+                  "是否相同:",
+                  oldWhiteboardId === id,
+                );
+                setCurrentWhiteboardId(id);
+
+                // 12. 等待 React 状态更新和 useEffect 执行完成
+                // 使用 requestAnimationFrame 确保在下一个渲染周期后执行
+                await new Promise((resolve) => {
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      resolve(undefined);
+                    });
+                  });
+                });
+
+                // 13. 再等待一小段时间，确保 useEffect 中的防抖函数已重新创建
+                await new Promise((resolve) => setTimeout(resolve, 100));
+
+                // 14. 再次确认新的 whiteboardId 已设置
+                console.log(
+                  "切换白板: 确认新白板ID已设置，当前值:",
+                  whiteboardIdRef.current,
+                );
+
+                // 15. 恢复自动保存
+                setIsLoadingWhiteboard(false);
+
+                // 16. 显示成功提示
+                excalidrawAPI.setToast({
+                  message: `已加载白板，已开启自动保存`,
+                });
+              } catch (error) {
+                // 如果加载失败，恢复旧的白板ID
+                setCurrentWhiteboardId(oldWhiteboardId);
+                setIsLoadingWhiteboard(false);
+                throw error;
+              }
+            }}
+          />
+        )}
+
+        {excalidrawAPI && showWhiteboardSelection && (
+          <WhiteboardSelectionDialog
+            excalidrawAPI={excalidrawAPI}
+            onNewWhiteboard={async (name: string) => {
+              if (!excalidrawAPI) {
+                throw new Error("Excalidraw API not available");
+              }
+
+              const HTTP_STORAGE_BACKEND_URL =
+                import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+
+              if (!HTTP_STORAGE_BACKEND_URL) {
+                throw new Error("后端服务未配置");
+              }
+
+              // 获取当前白板数据
+              const elements = excalidrawAPI.getSceneElements();
+              const appState = excalidrawAPI.getAppState();
+              const files = excalidrawAPI.getFiles();
+
+              // 序列化为 JSON
+              const jsonData = serializeAsJSON(
+                elements,
+                appState,
+                files,
+                "local",
+              );
+
+              // 转换为 base64
+              const base64Data = btoa(unescape(encodeURIComponent(jsonData)));
+
+              // 发送到后端
+              const response = await fetch(
+                `${HTTP_STORAGE_BACKEND_URL}/whiteboards`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    name: name.trim(),
+                    data: base64Data,
+                  }),
+                },
+              );
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || "创建白板失败");
+              }
+
+              const result = await response.json();
+              const whiteboardId = result.id;
+
+              // 设置当前白板ID并关闭选择对话框
+              setCurrentWhiteboardId(whiteboardId);
+              setShowWhiteboardSelection(false);
+
+              // 显示成功提示
+              excalidrawAPI.setToast({
+                message: `白板 "${name}" 创建成功，已开启自动保存`,
+              });
+
+              return whiteboardId;
+            }}
+            onSelectWhiteboard={async (id: string) => {
+              if (!excalidrawAPI) {
+                throw new Error("Excalidraw API not available");
+              }
+
+              const HTTP_STORAGE_BACKEND_URL =
+                import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+
+              if (!HTTP_STORAGE_BACKEND_URL) {
+                throw new Error("后端服务未配置");
+              }
+
+              // 1. 如果有当前白板，先保存当前白板内容
+              const oldWhiteboardId = currentWhiteboardId;
+              console.log(
+                "切换白板: 当前白板ID:",
+                oldWhiteboardId,
+                "新白板ID:",
+                id,
+                "是否相同:",
+                oldWhiteboardId === id,
+              );
+
+              if (oldWhiteboardId && oldWhiteboardId !== id) {
+                console.log("切换白板: 先保存当前白板内容");
+                try {
+                  // 取消待保存的任务，然后立即保存
+                  cancelAutoSave();
+                  // 等待一小段时间，确保取消操作完成
+                  await new Promise((resolve) => setTimeout(resolve, 100));
+                  // 立即保存当前白板
+                  const saveSuccess = await saveImmediately();
+                  if (!saveSuccess) {
+                    console.warn("保存当前白板失败，但继续切换");
+                  } else {
+                    console.log("当前白板已保存成功");
+                  }
+                } catch (error) {
+                  console.error("保存当前白板时出错:", error);
+                  // 即使保存失败，也继续切换（用户可能已经决定切换）
+                }
+              }
+
+              // 2. 取消所有待保存的任务
+              cancelAutoSave();
+
+              // 3. 先清除当前白板ID，防止在加载过程中触发自动保存
+              setCurrentWhiteboardId(null);
+
+              // 3. 等待一小段时间，确保防抖任务已完全取消，并且 ref 已更新
+              await new Promise((resolve) => setTimeout(resolve, 200));
+
+              setIsLoadingWhiteboard(true);
+
+              try {
+                // 4. 获取白板数据
+                const response = await fetch(
+                  `${HTTP_STORAGE_BACKEND_URL}/whiteboards/${id}`,
+                );
+
+                if (!response.ok) {
+                  throw new Error("加载白板失败");
+                }
+
+                // 5. 获取二进制数据
+                const arrayBuffer = await response.arrayBuffer();
+
+                // 6. 将 ArrayBuffer 转换为 Blob
+                const blob = new Blob([arrayBuffer], {
+                  type: "application/octet-stream",
+                });
+
+                // 7. 从 blob 加载数据
+                const currentAppState = excalidrawAPI.getAppState();
+                const currentElements = excalidrawAPI.getSceneElements();
+                const data = await loadFromBlob(
+                  blob,
+                  currentAppState,
+                  currentElements,
+                );
+
+                // 8. 更新场景（此时 currentWhiteboardId 为 null，不会触发自动保存）
+                excalidrawAPI.updateScene({
+                  elements: data.elements,
+                  appState: data.appState,
+                });
+
+                // 9. 如果有文件，添加文件
+                if (data.files) {
+                  excalidrawAPI.addFiles(Object.values(data.files));
+                }
+
+                // 10. 等待一小段时间，确保 updateScene 触发的 onChange 已完成
+                await new Promise((resolve) => setTimeout(resolve, 200));
+
+                // 11. 设置新的白板ID（此时才会启用自动保存）
+                console.log(
+                  "切换白板: 设置新白板ID:",
+                  id,
+                  "旧白板ID:",
+                  oldWhiteboardId,
+                  "是否相同:",
+                  oldWhiteboardId === id,
+                );
+                setCurrentWhiteboardId(id);
+
+                // 12. 等待 React 状态更新和 useEffect 执行完成
+                // 使用 requestAnimationFrame 确保在下一个渲染周期后执行
+                await new Promise((resolve) => {
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      resolve(undefined);
+                    });
+                  });
+                });
+
+                // 13. 再等待一小段时间，确保 useEffect 中的防抖函数已重新创建
+                await new Promise((resolve) => setTimeout(resolve, 100));
+
+                // 14. 再次确认新的 whiteboardId 已设置
+                console.log(
+                  "切换白板: 确认新白板ID已设置，当前值:",
+                  whiteboardIdRef.current,
+                );
+
+                setShowWhiteboardSelection(false);
+
+                // 13. 恢复自动保存
+                setIsLoadingWhiteboard(false);
+
+                // 14. 显示成功提示
+                excalidrawAPI.setToast({
+                  message: `已加载白板，已开启自动保存`,
+                });
+              } catch (error) {
+                // 如果加载失败，恢复旧的白板ID
+                setCurrentWhiteboardId(oldWhiteboardId);
+                setIsLoadingWhiteboard(false);
+                throw error;
+              }
+            }}
+            onClose={() => {
+              // 如果还没有选择白板，不允许关闭
+              if (!currentWhiteboardId) {
+                return;
+              }
+              setShowWhiteboardSelection(false);
+            }}
+          />
+        )}
 
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>

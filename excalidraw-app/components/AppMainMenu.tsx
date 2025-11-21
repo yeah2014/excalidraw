@@ -3,12 +3,15 @@ import {
   loginIcon,
   ExcalLogo,
   eyeIcon,
+  LoadIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import type { Theme } from "@excalidraw/excalidraw/element/types";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
 import { LanguageList } from "../app-language/LanguageList";
 import { saveDebugState } from "./DebugCanvas";
+import { useAtom } from "../app-jotai";
+import { whiteboardHistoryDialogStateAtom } from "./WhiteboardDialogs";
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
@@ -18,10 +21,19 @@ export const AppMainMenu: React.FC<{
   setTheme: (theme: Theme | "system") => void;
   refresh: () => void;
 }> = React.memo((props) => {
+  const [, setWhiteboardHistoryDialogOpen] = useAtom(
+    whiteboardHistoryDialogStateAtom,
+  );
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
+      <MainMenu.Item
+        icon={LoadIcon}
+        onClick={() => setWhiteboardHistoryDialogOpen(true)}
+      >
+        我的历史白板
+      </MainMenu.Item>
       <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
       {props.isCollabEnabled && (
