@@ -6,8 +6,9 @@ import { FilledButton } from "@excalidraw/excalidraw/components/FilledButton";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
 
-const HTTP_STORAGE_BACKEND_URL =
-  import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+import { getEnvVar } from "../utils/env";
+
+const HTTP_STORAGE_BACKEND_URL = getEnvVar("VITE_APP_HTTP_STORAGE_BACKEND_URL", "");
 
 export type SaveWhiteboardDialogProps = {
   excalidrawAPI: ExcalidrawImperativeAPI | null;

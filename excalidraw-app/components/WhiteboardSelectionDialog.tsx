@@ -6,8 +6,9 @@ import { KEYS } from "@excalidraw/excalidraw/keys";
 import { LoadIcon, save } from "@excalidraw/excalidraw/components/icons";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
-const HTTP_STORAGE_BACKEND_URL =
-  import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+import { getEnvVar } from "../utils/env";
+
+const HTTP_STORAGE_BACKEND_URL = getEnvVar("VITE_APP_HTTP_STORAGE_BACKEND_URL", "");
 
 interface Whiteboard {
   id: string;

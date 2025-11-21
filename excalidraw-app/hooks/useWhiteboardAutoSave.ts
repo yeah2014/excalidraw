@@ -2,9 +2,9 @@ import { useRef, useCallback, useEffect } from "react";
 import { debounce } from "@excalidraw/excalidraw/utils";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
+import { getEnvVar } from "../utils/env";
 
-const HTTP_STORAGE_BACKEND_URL =
-  import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+const HTTP_STORAGE_BACKEND_URL = getEnvVar("VITE_APP_HTTP_STORAGE_BACKEND_URL", "");
 
 export const useWhiteboardAutoSave = (
   excalidrawAPI: ExcalidrawImperativeAPI | null,

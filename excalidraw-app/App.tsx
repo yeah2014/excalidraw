@@ -94,6 +94,7 @@ import { WhiteboardDialogs } from "./components/WhiteboardDialogs";
 import { WhiteboardSelectionDialog } from "./components/WhiteboardSelectionDialog";
 import { useWhiteboardAutoSave } from "./hooks/useWhiteboardAutoSave";
 import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
+import { getEnvVar } from "./utils/env";
 import {
   Provider,
   useAtom,
@@ -976,8 +977,10 @@ const ExcalidrawWrapper = () => {
                 throw new Error("Excalidraw API not available");
               }
 
-              const HTTP_STORAGE_BACKEND_URL =
-                import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+              const HTTP_STORAGE_BACKEND_URL = getEnvVar(
+                "VITE_APP_HTTP_STORAGE_BACKEND_URL",
+                "",
+              );
 
               if (!HTTP_STORAGE_BACKEND_URL) {
                 throw new Error("后端服务未配置");
@@ -1121,8 +1124,10 @@ const ExcalidrawWrapper = () => {
                 throw new Error("Excalidraw API not available");
               }
 
-              const HTTP_STORAGE_BACKEND_URL =
-                import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+              const HTTP_STORAGE_BACKEND_URL = getEnvVar(
+                "VITE_APP_HTTP_STORAGE_BACKEND_URL",
+                "",
+              );
 
               if (!HTTP_STORAGE_BACKEND_URL) {
                 throw new Error("后端服务未配置");
@@ -1183,8 +1188,10 @@ const ExcalidrawWrapper = () => {
                 throw new Error("Excalidraw API not available");
               }
 
-              const HTTP_STORAGE_BACKEND_URL =
-                import.meta.env.VITE_APP_HTTP_STORAGE_BACKEND_URL || "";
+              const HTTP_STORAGE_BACKEND_URL = getEnvVar(
+                "VITE_APP_HTTP_STORAGE_BACKEND_URL",
+                "",
+              );
 
               if (!HTTP_STORAGE_BACKEND_URL) {
                 throw new Error("后端服务未配置");
