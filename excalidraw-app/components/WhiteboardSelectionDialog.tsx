@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
 import { FilledButton } from "@excalidraw/excalidraw/components/FilledButton";
 import { TextField } from "@excalidraw/excalidraw/components/TextField";
@@ -8,7 +8,10 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import { getEnvVar } from "../utils/env";
 
-const HTTP_STORAGE_BACKEND_URL = getEnvVar("VITE_APP_HTTP_STORAGE_BACKEND_URL", "");
+const HTTP_STORAGE_BACKEND_URL = getEnvVar(
+  "VITE_APP_HTTP_STORAGE_BACKEND_URL",
+  "",
+);
 
 interface Whiteboard {
   id: string;
@@ -22,6 +25,7 @@ export type WhiteboardSelectionDialogProps = {
   onNewWhiteboard: (name: string) => Promise<string>; // 返回白板ID
   onSelectWhiteboard: (id: string) => Promise<void>;
   onClose: () => void;
+  initialMode?: "select" | "new" | "history"; // 初始模式
 };
 
 export const WhiteboardSelectionDialog = ({
@@ -29,8 +33,9 @@ export const WhiteboardSelectionDialog = ({
   onNewWhiteboard,
   onSelectWhiteboard,
   onClose,
+  initialMode = "select",
 }: WhiteboardSelectionDialogProps) => {
-  const [mode, setMode] = useState<"select" | "new" | "history">("select");
+  const [mode, setMode] = useState<"select" | "new" | "history">(initialMode);
   const [name, setName] = useState("");
   const [whiteboards, setWhiteboards] = useState<Whiteboard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,6 +43,11 @@ export const WhiteboardSelectionDialog = ({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+
+  // 当 initialMode 改变时，更新 mode
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   const loadWhiteboards = async () => {
     if (!HTTP_STORAGE_BACKEND_URL) {

@@ -371,6 +371,9 @@ const ExcalidrawWrapper = () => {
     null,
   );
   const [showWhiteboardSelection, setShowWhiteboardSelection] = useState(true);
+  const [whiteboardSelectionMode, setWhiteboardSelectionMode] = useState<
+    "select" | "new" | "history"
+  >("select");
   const [isLoadingWhiteboard, setIsLoadingWhiteboard] = useState(false);
   const whiteboardIdRef = useRef<string | null>(null);
 
@@ -386,6 +389,39 @@ const ExcalidrawWrapper = () => {
     cancel: cancelAutoSave,
     saveImmediately,
   } = useWhiteboardAutoSave(excalidrawAPI, currentWhiteboardId);
+
+  // 当显示白板选择弹窗时，清空画布内容
+  useEffect(() => {
+    if (showWhiteboardSelection && excalidrawAPI) {
+      // 取消任何正在进行的自动保存
+      cancelAutoSave();
+      // 清空当前白板ID
+      setCurrentWhiteboardId(null);
+
+      // 清空 localStorage 中的白板数据，防止 initializeScene 重新加载
+      try {
+        localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_ELEMENTS);
+        localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_APP_STATE);
+      } catch (error) {
+        console.warn("Failed to clear localStorage:", error);
+      }
+
+      // 立即清空画布
+      excalidrawAPI.resetScene();
+
+      // 再次确保清空（防止 initializeScene 在 resetScene 之后执行）
+      const timer = setTimeout(() => {
+        if (excalidrawAPI && showWhiteboardSelection) {
+          const elements = excalidrawAPI.getSceneElements();
+          if (elements.length > 0) {
+            excalidrawAPI.updateScene({ elements: [] });
+          }
+        }
+      }, 200);
+
+      return () => clearTimeout(timer);
+    }
+  }, [showWhiteboardSelection, excalidrawAPI, cancelAutoSave]);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
@@ -907,6 +943,10 @@ const ExcalidrawWrapper = () => {
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
+          onCreateNewWhiteboard={() => {
+            setWhiteboardSelectionMode("new");
+            setShowWhiteboardSelection(true);
+          }}
         />
         <AppWelcomeScreen
           onCollabDialogOpen={onCollabDialogOpen}
@@ -1119,6 +1159,7 @@ const ExcalidrawWrapper = () => {
         {excalidrawAPI && showWhiteboardSelection && (
           <WhiteboardSelectionDialog
             excalidrawAPI={excalidrawAPI}
+            initialMode={whiteboardSelectionMode}
             onNewWhiteboard={async (name: string) => {
               if (!excalidrawAPI) {
                 throw new Error("Excalidraw API not available");

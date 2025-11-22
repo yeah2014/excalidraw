@@ -6,17 +6,24 @@ export function getEnvVar(key: string, defaultValue: string = ""): string {
   // 优先从运行时环境变量读取（支持 dynamic-env.Dockerfile）
   if (typeof window !== "undefined" && (window as any)._env_) {
     const runtimeValue = (window as any)._env_[key];
-    if (runtimeValue !== undefined && runtimeValue !== null && runtimeValue !== "") {
+    if (
+      runtimeValue !== undefined &&
+      runtimeValue !== null &&
+      runtimeValue !== ""
+    ) {
       return String(runtimeValue);
     }
   }
-  
+
   // 从构建时环境变量读取
-  const buildTimeValue = import.meta.env[key as keyof typeof import.meta.env];
-  if (buildTimeValue !== undefined && buildTimeValue !== null && buildTimeValue !== "") {
+  const buildTimeValue = (import.meta.env as any)[key];
+  if (
+    buildTimeValue !== undefined &&
+    buildTimeValue !== null &&
+    buildTimeValue !== ""
+  ) {
     return String(buildTimeValue);
   }
-  
+
   return defaultValue;
 }
-

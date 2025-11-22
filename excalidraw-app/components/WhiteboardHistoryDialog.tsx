@@ -5,7 +5,10 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
 import { getEnvVar } from "../utils/env";
 
-const HTTP_STORAGE_BACKEND_URL = getEnvVar("VITE_APP_HTTP_STORAGE_BACKEND_URL", "");
+const HTTP_STORAGE_BACKEND_URL = getEnvVar(
+  "VITE_APP_HTTP_STORAGE_BACKEND_URL",
+  "",
+);
 
 interface Whiteboard {
   id: string;

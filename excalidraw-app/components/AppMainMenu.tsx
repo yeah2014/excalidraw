@@ -4,6 +4,7 @@ import {
   ExcalLogo,
   eyeIcon,
   LoadIcon,
+  save,
 } from "@excalidraw/excalidraw/components/icons";
 import type { Theme } from "@excalidraw/excalidraw/element/types";
 import { MainMenu } from "@excalidraw/excalidraw/index";
@@ -20,6 +21,7 @@ export const AppMainMenu: React.FC<{
   theme: Theme | "system";
   setTheme: (theme: Theme | "system") => void;
   refresh: () => void;
+  onCreateNewWhiteboard?: () => void;
 }> = React.memo((props) => {
   const [, setWhiteboardHistoryDialogOpen] = useAtom(
     whiteboardHistoryDialogStateAtom,
@@ -28,6 +30,11 @@ export const AppMainMenu: React.FC<{
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
+      {props.onCreateNewWhiteboard && (
+        <MainMenu.Item icon={save} onClick={props.onCreateNewWhiteboard}>
+          创建新白板
+        </MainMenu.Item>
+      )}
       <MainMenu.Item
         icon={LoadIcon}
         onClick={() => setWhiteboardHistoryDialogOpen(true)}
